@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Truyen Cua Tui - Đọc truyện online</title>
+    <style>
+        :root { --bg: #1a1a1a; --card: #252525; --text: #eee; --accent: #ff385c; }
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; -webkit-user-select: none; user-select: none; }
+        
+        header { background: #000; padding: 15px; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--accent); position: sticky; top:0; z-index: 100; }
+        header h1 { font-size: 20px; color: var(--accent); cursor: pointer; }
+        
+        .container { padding: 15px; max-width: 800px; margin: auto; }
+        .grid { display: grid; grid-template-columns: 1fr; gap: 15px; }
+        
+        .card { background: var(--card); padding: 15px; border-radius: 8px; position: relative; border: 1px solid #333; transition: 0.3s; }
+        .card:hover { border-color: var(--accent); }
+        .card h3 { margin-bottom: 5px; font-size: 18px; color: #fff; }
+        .card p { color: #888; font-size: 14px; }
+
+        .btn-delete { background: #ff4444; color: white; border: none; padding: 5px 10px; border-radius: 4px; position: absolute; top: 15px; right: 15px; font-size: 12px; cursor: pointer; }
+        
+        #reader, #admin { display: none; animation: fadeIn 0.3s; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+        .content { background: #222; padding: 20px; border-radius: 8px; line-height: 1.8; font-size: 19px; white-space: pre-wrap; color: #ccc; margin-top: 15px; }
+        
+        input, textarea { width: 100%; padding: 12px; margin-bottom: 10px; border-radius: 6px; border: 1px solid #444; background: #333; color: #fff; font-size: 16px; -webkit-user-select: text; user-select: text; }
+        .btn { background: var(--accent); color: white; border: none; padding: 12px; border-radius: 6px; font-weight: bold; width: 100%; cursor: pointer; }
+        .btn-back { background: #444; margin-bottom: 15px; width: auto; padding: 8px 15px; }
+
+        .blur-mode { filter: blur(20px); }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1 onclick="unlockAdmin()">📖 TRUYENCUATUI</h1>
+    <button id="adminBtn" class="btn" style="display:none; width: auto;" onclick="showAdmin()">+ Đăng truyện</button>
+</header>
+
+<div class="container">
+    <!-- DANH SÁCH TRUYỆN -->
+    <div id="home">
+        <h2 style="margin-bottom: 15px;">Truyện mới cập nhật</h2>
+        <div id="storyList" class="grid">Đang tải dữ liệu...</div>
+    </div>
+
+    <!-- TRÌNH ĐỌC -->
+    <div id="reader">
+        <button class="btn btn-back" onclick="goHome()">← Quay lại</button>
+        <h2 id="r-title" style="color: var(--accent);"></h2>
+        <div class="content" id="r-content"></div>
+    </div>
+
+    <!-- QUẢN TRỊ -->
+    <div id="admin">
+        <button class="btn btn-back" onclick="goHome()">← Hủy</button>
+        <h2>Thêm chương mới</h2>
+        <input type="text" id="a-name" placeholder="Tên truyện">
+        <input type="text" id="a-chap" placeholder="Chương số (Ví dụ: Chương 1)">
+        <textarea id="a-content" rows="15" placeholder="Nội dung truyện..."></textarea>
+        <button class="btn" onclick="saveStory()">XUẤT BẢN NGAY</button>
+    </div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getFirestore, collection, addDoc, getDocs, query, orderBy, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+    // --- ĐIỀN CONFIG CỦA BẠN VÀO ĐÂY ---
+    const firebaseConfig = {
+  apiKey: "AIzaSyCHpgEfiBo5tJozMI68TjEH_iNtFA1wgqk",
+  authDomain: "apptruyen-40b76.firebaseapp.com",
+  projectId: "apptruyen-40b76",
+  storageBucket: "apptruyen-40b76.firebasestorage.app",
+  messagingSenderId: "495770222258",
+  appId: "1:495770222258:web:5b020ee6dbdd39971f13ab",
+  measurementId: "G-9HNJG2HZ7Y"
+};
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    let isAdminMode = false;
+
+    // Mở quyền Admin
+    window.unlockAdmin = function() {
+        const pass = prompt("Nhập mã bảo mật Admin:");
+        if (pass === "1713873") {
+            isAdminMode = true;
+            document.getElementById('adminBtn').style.display = 'block';
+            alert("Chào Admin! Các công cụ quản lý đã sẵn sàng.");
+            renderHome();
+        }
+    };
+
+    // Chống copy/chụp màn hình
+    window.addEventListener('blur', () => document.body.classList.add('blur-mode'));
+    window.addEventListener('focus', () => document.body.classList.remove('blur-mode'));
+
+    // Điều hướng
+    window.goHome = () => {
+        document.getElementById('home').style.display = 'block';
+        document.getElementById('reader').style.display = 'none';
+        document.getElementById('admin').style.display = 'none';
+        renderHome();
+    };
+    window.showAdmin = () => {
+        document.getElementById('home').style.display = 'none';
+        document.getElementById('admin').style.display = 'block';
+    };
+
+    // Hiển thị truyện
+    async function renderHome() {
+        const listDiv = document.getElementById('storyList');
+        try {
+            const q = query(collection(db, "stories"), orderBy("createdAt", "desc"));
+            const querySnapshot = await getDocs(q);
+            listDiv.innerHTML = "";
+
+            if (querySnapshot.empty) {
+                listDiv.innerHTML = "Chưa có nội dung nào được đăng.";
+                return;
+            }
+
+            querySnapshot.forEach((documentSnap) => {
+                const data = documentSnap.data();
+                const docId = documentSnap.id;
+
+                const card = document.createElement('div');
+                card.className = 'card';
+                
+                const info = document.createElement('div');
+                info.style.cursor = "pointer";
+                info.innerHTML = `<h3>${data.name}</h3><p>${data.chap}</p>`;
+                info.onclick = () => {
+                    document.getElementById('home').style.display = 'none';
+                    document.getElementById('reader').style.display = 'block';
+                    document.getElementById('r-title').innerText = data.name + " - " + data.chap;
+                    document.getElementById('r-content').innerText = data.content;
+                    window.scrollTo(0,0);
+                };
+
+                card.appendChild(info);
+
+                if (isAdminMode) {
+                    const delBtn = document.createElement('button');
+                    delBtn.className = 'btn-delete';
+                    delBtn.innerText = 'Xóa';
+                    delBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        if(confirm("Xóa chương này?")) deleteStory(docId);
+                    };
+                    card.appendChild(delBtn);
+                }
+                listDiv.appendChild(card);
+            });
+        } catch (e) {
+            listDiv.innerHTML = "Lỗi kết nối Firebase. Kiểm tra Authorized Domains!";
+        }
+    }
+
+    async function saveStory() {
+        const name = document.getElementById('a-name').value;
+        const chap = document.getElementById('a-chap').value;
+        const content = document.getElementById('a-content').value;
+
+        if(!name || !chap || !content) return alert("Nhập đủ thông tin!");
+
+        try {
+            await addDoc(collection(db, "stories"), {
+                name, chap, content, createdAt: new Date()
+            });
+            alert("Đăng truyện thành công!");
+            goHome();
+        } catch (e) { alert("Lỗi: " + e.message); }
+    }
+
+    async function deleteStory(id) {
+        await deleteDoc(doc(db, "stories", id));
+        renderHome();
+    }
+
+    renderHome();
+</script>
+</body>
+</html>
